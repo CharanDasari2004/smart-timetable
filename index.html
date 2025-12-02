@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Timetable Generator</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3f37c9;
+            --bg-body: #f8f9fa;
+            --bg-panel: #ffffff;
+            --text-main: #2b2d42;
+            --text-muted: #8d99ae;
+            --border: #e9ecef;
+            --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+            --radius: 12px;
+            --transition: all 0.3s ease;
+        }
+
+        [data-theme="dark"] {
+            --primary: #4cc9f0;
+            --secondary: #4895ef;
+            --bg-body: #121212;
+            --bg-panel: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border: #333333;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        
+        body { background-color: var(--bg-body); color: var(--text-main); transition: var(--transition); min-height: 100vh; display: flex; flex-direction: column; }
+
+        /* --- Header --- */
+        header {
+            background: var(--bg-panel);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+
+        h1 { font-size: 1.5rem; color: var(--primary); }
+        
+        .controls { display: flex; gap: 1rem; align-items: center; }
+
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            padding: 0.6rem 1.2rem;
+            font-weight: 600;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--secondary); transform: translateY(-2px); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+        .btn-outline:hover { background: var(--border); }
+        .btn-danger { background: #ef233c; color: white; }
+
+        /* --- Layout --- */
+        .container {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            flex: 1;
+        }
+
+        /* --- Sidebar --- */
+        aside {
+            background: var(--bg-panel);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            height: fit-content;
+        }
+
+        h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+        
+        .input-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-muted); }
+        
+        input, select {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--bg-body);
+            color: var(--text-main);
+            outline: none;
+        }
+
+        .subject-list {
+            margin-top: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .subject-item {
+            background: var(--bg-body);
+            padding: 0.8rem;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid transparent;
+            cursor: grab;
+        }
+
+        .subject-item:active { cursor: grabbing; }
+
+        .color-dot { width: 15px; height: 15px; border-radius: 50%; display: inline-block; }
+
+        /* --- Main Timetable --- */
+        main {
+            background: var(--bg-panel);
+            padding: 1.5rem;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow-x: auto;
+        }
+
+        #timetable-grid {
+            display: grid;
+            /* Grid template set via JS */
+            gap: 1px;
+            background: var(--border);
+            border: 1px solid var(--border);
+            min-width: 800px; /* Force scroll on small screens */
+        }
+
+        .grid-cell {
+            background: var(--bg-panel);
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 5px;
+            text-align: center;
+            font-size: 0.9rem;
+            position: relative;
+            transition: background 0.2s;
+        }
+
+        .grid-header {
+            background: var(--bg-body);
+            font-weight: bold;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        /* Draggable Items inside Grid */
+        .timetable-block {
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: grab;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+            user-select: none;
+        }
+
+        .timetable-block .delete-btn {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 0.7rem;
+            opacity: 0;
+            cursor: pointer;
+            background: rgba(0,0,0,0.2);
+            padding: 2px 4px;
+            border-radius: 4px;
+        }
+
+        .timetable-block:hover .delete-btn { opacity: 1; }
+
+        /* Drag Classes */
+        .dragging { opacity: 0.5; }
+        .drag-over { background-color: var(--border); }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1><i class="fas fa-calendar-alt"></i> SmartSchedule</h1>
+        <div class="controls">
+            <button class="btn-outline" onclick="toggleTheme()" id="theme-btn">
+                <i class="fas fa-moon"></i>
+            </button>
+            <button class="btn-outline" onclick="exportPDF()">
+                <i class="fas fa-file-pdf"></i> Export
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        <aside>
+            <h2>Configuration</h2>
+            <div class="input-group">
+                <label>Periods per Day</label>
+                <input type="number" id="period-count" value="6" min="1" max="10">
+            </div>
+            <div class="input-group">
+                <label>Days per Week</label>
+                <select id="day-count">
+                    <option value="5">5 Days (Mon-Fri)</option>
+                    <option value="6">6 Days (Mon-Sat)</option>
+                </select>
+            </div>
+            
+            <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid var(--border);">
+
+            <h2>Add Subject</h2>
+            <div class="input-group">
+                <input type="text" id="subject-name" placeholder="Math, Science, History...">
+            </div>
+            <div class="input-group">
+                <input type="color" id="subject-color" value="#4361ee" style="height: 40px; cursor: pointer;">
+            </div>
+            <button class="btn-primary" style="width: 100%" onclick="addSubject()">
+                <i class="fas fa-plus"></i> Add Subject
+            </button>
+
+            <div id="subject-pool" class="subject-list">
+                </div>
+
+            <div style="margin-top: 2rem; display: flex; gap: 10px;">
+                <button class="btn-primary" style="flex: 1" onclick="generateRandomTimetable()">Auto-Fill</button>
+                <button class="btn-danger" onclick="resetTimetable()"><i class="fas fa-trash"></i></button>
+            </div>
+        </aside>
+
+        <main id="timetable-area">
+            <div id="timetable-grid">
+                </div>
+        </main>
+    </div>
+
+    <script>
+        // State Management
+        let state = {
+            subjects: [],
+            config: { periods: 6, days: 5 },
+            gridData: {} // Key: "day-period", Value: subjectObj
+        };
+
+        const daysMap = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+        const autoColors = ['#ef476f', '#ffd166', '#06d6a0', '#118ab2', '#073b4c', '#9d4edd', '#ff9f1c'];
+
+        // DOM Elements
+        const gridEl = document.getElementById('timetable-grid');
+        const subjectPoolEl = document.getElementById('subject-pool');
+
+        // --- Initialization ---
+        window.onload = () => {
+            loadState();
+            renderSubjects();
+            renderGrid();
+            applyTheme();
+        };
+
+        // --- Core Functions ---
+
+        function addSubject() {
+            const nameInput = document.getElementById('subject-name');
+            const colorInput = document.getElementById('subject-color');
+            
+            if(!nameInput.value.trim()) return;
+
+            const newSubject = {
+                id: Date.now().toString(),
+                name: nameInput.value.trim(),
+                color: colorInput.value
+            };
+
+            state.subjects.push(newSubject);
+            
+            // Auto-cycle colors for next input
+            const nextColorIndex = state.subjects.length % autoColors.length;
+            colorInput.value = autoColors[nextColorIndex];
+            nameInput.value = '';
+            nameInput.focus();
+
+            saveState();
+            renderSubjects();
+        }
+
+        function deleteSubject(id) {
+            state.subjects = state.subjects.filter(s => s.id !== id);
+            // Remove from grid as well
+            for (let key in state.gridData) {
+                if (state.gridData[key].id === id) delete state.gridData[key];
+            }
+            saveState();
+            renderSubjects();
+            renderGrid();
+        }
+
+        function renderSubjects() {
+            subjectPoolEl.innerHTML = '';
+            state.subjects.forEach(sub => {
+                const el = document.createElement('div');
+                el.className = 'subject-item';
+                el.draggable = true;
+                el.style.borderLeftColor = sub.color;
+                el.innerHTML = `
+                    <span style="font-weight:600">${sub.name}</span>
+                    <i class="fas fa-times" style="cursor:pointer; color:var(--text-muted)" onclick="deleteSubject('${sub.id}')"></i>
+                `;
+                
+                // Drag Events for Source
+                el.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', JSON.stringify(sub));
+                    e.dataTransfer.effectAllowed = 'copy';
+                });
+
+                subjectPoolEl.appendChild(el);
+            });
+        }
+
+        function renderGrid() {
+            const periods = parseInt(document.getElementById('period-count').value);
+            const dayCount = parseInt(document.getElementById('day-count').value);
+            
+            state.config.periods = periods;
+            state.config.days = dayCount;
+
+            // Set Grid CSS
+            gridEl.style.gridTemplateColumns = `80px repeat(${periods}, 1fr)`;
+            gridEl.innerHTML = '';
+
+            // Header Row (Periods)
+            gridEl.appendChild(createCell('Time', 'grid-header'));
+            for(let i=1; i<=periods; i++) {
+                gridEl.appendChild(createCell(`Period ${i}`, 'grid-header'));
+            }
+
+            // Body Rows
+            for(let d=0; d<dayCount; d++) {
+                // Day Label
+                gridEl.appendChild(createCell(daysMap[d], 'grid-header'));
+
+                for(let p=1; p<=periods; p++) {
+                    const cellKey = `${d}-${p}`;
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell';
+                    cell.dataset.key = cellKey;
+
+                    // Check if data exists for this cell
+                    if(state.gridData[cellKey]) {
+                        cell.appendChild(createBlock(state.gridData[cellKey], cellKey));
+                    }
+
+                    // Drop Events
+                    cell.addEventListener('dragover', (e) => {
+                        e.preventDefault();
+                        cell.classList.add('drag-over');
+                    });
+                    
+                    cell.addEventListener('dragleave', () => cell.classList.remove('drag-over'));
+                    
+                    cell.addEventListener('drop', (e) => handleDrop(e, cellKey));
+
+                    gridEl.appendChild(cell);
+                }
+            }
+            saveState();
+        }
+
+        function createCell(text, extraClass = '') {
+            const div = document.createElement('div');
+            div.className = `grid-cell ${extraClass}`;
+            div.innerText = text;
+            return div;
+        }
+
+        function createBlock(subject, key) {
+            const div = document.createElement('div');
+            div.className = 'timetable-block';
+            div.style.backgroundColor = subject.color;
+            div.draggable = true;
+            div.innerHTML = `
+                ${subject.name}
+                <span class="delete-btn" onclick="removeBlock('${key}')"><i class="fas fa-times"></i></span>
+            `;
+
+            // Drag Start (Move existing block)
+            div.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('sourceKey', key); // We are moving from this key
+                e.dataTransfer.setData('text/plain', JSON.stringify(subject));
+                e.dataTransfer.effectAllowed = 'move';
+                setTimeout(() => div.classList.add('dragging'), 0);
+            });
+
+            div.addEventListener('dragend', () => div.classList.remove('dragging'));
+
+            return div;
+        }
+
+        // --- Drag and Drop Logic ---
+
+        function handleDrop(e, targetKey) {
+            e.preventDefault();
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+
+            const subjectData = JSON.parse(e.dataTransfer.getData('text/plain'));
+            const sourceKey = e.dataTransfer.getData('sourceKey');
+
+            // Update State
+            state.gridData[targetKey] = subjectData;
+
+            // If it was a move operation (internal drag), clear the source
+            if(sourceKey && sourceKey !== 'undefined' && sourceKey !== targetKey) {
+                delete state.gridData[sourceKey];
+            }
+
+            renderGrid();
+        }
+
+        function removeBlock(key) {
+            delete state.gridData[key];
+            renderGrid();
+        }
+
+        // --- Automation & Utilities ---
+
+        function generateRandomTimetable() {
+            if(state.subjects.length === 0) {
+                alert("Please add subjects first!");
+                return;
+            }
+            
+            const periods = state.config.periods;
+            const days = state.config.days;
+            
+            // Simple round-robin filling
+            let subIndex = 0;
+            for(let d=0; d<days; d++) {
+                for(let p=1; p<=periods; p++) {
+                    const key = `${d}-${p}`;
+                    // Only fill if empty
+                    if(!state.gridData[key]) {
+                        state.gridData[key] = state.subjects[subIndex];
+                        subIndex = (subIndex + 1) % state.subjects.length;
+                    }
+                }
+            }
+            renderGrid();
+        }
+
+        function resetTimetable() {
+            if(confirm("Clear the entire timetable?")) {
+                state.gridData = {};
+                renderGrid();
+            }
+        }
+
+        function exportPDF() {
+            const element = document.getElementById('timetable-area');
+            const opt = {
+                margin: 0.5,
+                filename: 'my-timetable.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2 },
+                jsPDF: { unit: 'in', format: 'landscape', orientation: 'landscape' }
+            };
+            html2pdf().set(opt).from(element).save();
+        }
+
+        // --- Theme & Storage ---
+
+        function toggleTheme() {
+            const body = document.body;
+            const current = body.getAttribute('data-theme');
+            const next = current === 'dark' ? 'light' : 'dark';
+            body.setAttribute('data-theme', next);
+            localStorage.setItem('theme', next);
+            
+            // Update Icon
+            const btn = document.getElementById('theme-btn');
+            btn.innerHTML = next === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        }
+
+        function applyTheme() {
+            const saved = localStorage.getItem('theme') || 'light';
+            document.body.setAttribute('data-theme', saved);
+            document.getElementById('theme-btn').innerHTML = saved === 'dark' ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+        }
+
+        function saveState() {
+            localStorage.setItem('timetableState', JSON.stringify(state));
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem('timetableState');
+            if(saved) {
+                state = JSON.parse(saved);
+                // restore inputs
+                document.getElementById('period-count').value = state.config.periods;
+                document.getElementById('day-count').value = state.config.days;
+            }
+        }
+
+        // Listen for config changes to redraw grid immediately
+        document.getElementById('period-count').addEventListener('change', renderGrid);
+        document.getElementById('day-count').addEventListener('change', renderGrid);
+
+    </script>
+</body>
+</html>
